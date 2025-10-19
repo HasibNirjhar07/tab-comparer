@@ -73,12 +73,51 @@ export const FileInput = ({ label, value, onChange, placeholder, data }: FileInp
           </label>
         </Button>
       </div>
-      <Textarea
-        placeholder={placeholder}
-        value={value}
-        onChange={handlePasteChange}
-        className="min-h-[120px] font-mono text-sm resize-y"
-      />
+      <div 
+        contentEditable
+        onPaste={(e) => {
+          e.preventDefault();
+          const text = e.clipboardData.getData('text');
+          if (!text.trim()) {
+            onChange([]);
+            return;
+          }
+          const rows = text.split('\n').filter(row => row.trim());
+          const data = rows.map(row => row.split('\t'));
+          onChange(data);
+        }}
+        className="min-h-[120px] border rounded-md bg-background p-3 focus:outline-none focus:ring-2 focus:ring-primary overflow-auto"
+      >
+        {data.length === 0 ? (
+          <div className="grid grid-cols-[repeat(5,minmax(100px,1fr))] gap-px bg-border">
+            {Array.from({ length: 20 }).map((_, idx) => (
+              <div
+                key={idx}
+                className="bg-card border border-border p-2 min-h-[32px] text-xs text-muted-foreground/50"
+              >
+                {idx === 0 && placeholder}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <table className="w-full border-collapse">
+            <tbody>
+              {data.map((row, rowIndex) => (
+                <tr key={rowIndex}>
+                  {row.map((cell, colIndex) => (
+                    <td 
+                      key={colIndex} 
+                      className="border border-border px-2 py-1 text-xs min-w-[100px]"
+                    >
+                      {cell}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
       
       {data.length > 0 && (
         <div className="border rounded-md bg-card">
