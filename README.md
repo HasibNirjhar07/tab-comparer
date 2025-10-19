@@ -1,72 +1,126 @@
-# Welcome to your Lovable project
+🧩 Tab Comparer
 
-## Project info
+Compare two Excel sheets or pasted datasets instantly and visually identify mismatched values — all in your browser.
+Built with Next.js, this lightweight tool makes spreadsheet comparison simple, accurate, and intuitive.
 
-**URL**: https://lovable.dev/projects/c4e59cc1-12d9-4d58-ae2a-8ebffb84f637
+✨ Features
 
-## How can I edit this code?
+📂 Upload or paste two Excel datasets side by side
 
-There are several ways of editing your application.
+🔍 Compare values column by column and row by row
 
-**Use Lovable**
+🎨 Automatically highlight mismatched cells
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/c4e59cc1-12d9-4d58-ae2a-8ebffb84f637) and start prompting.
+🧭 Displays column names and row numbers for differences
 
-Changes made via Lovable will be committed automatically to this repo.
+⚡ Fast, client-side comparison — no backend required
 
-**Use your preferred IDE**
+🪶 Clean, responsive, and user-friendly interface
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+🖥️ How It Works
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+Upload or paste your first dataset (reference Excel data).
 
-Follow these steps:
+Upload or paste your second dataset (the one to compare).
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+Click Compare Data.
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+The app:
 
-# Step 3: Install the necessary dependencies.
-npm i
+Reads both datasets.
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
+Matches data based on column headers.
+
+Highlights mismatched values with color cues.
+
+Instantly view mismatches directly on-screen.
+
+🗂️ Project Structure
+tab-comparer/
+├── public/
+│   ├── favicon.ico
+│   ├── placeholder.svg
+│   └── robots.txt
+├── src/
+│   ├── components/
+│   │   ├── ui/
+│   │   ├── ComparisonResults.tsx
+│   │   └── FileInput.tsx
+│   ├── hooks/
+│   │   ├── use-mobile.tsx
+│   │   └── use-toast.ts
+│   ├── lib/
+│   │   └── utils.ts
+│   └── pages/
+│       ├── Index.tsx
+│       └── NotFound.tsx
+├── package.json
+└── README.md
+
+⚙️ Installation & Setup
+
+Clone the repository
+
+git clone https://github.com/HasibNirjhar07/tab-comparer.git
+cd tab-comparer
+
+
+Install dependencies
+
+npm install
+
+
+Run the development server
+
 npm run dev
-```
 
-**Edit a file directly in GitHub**
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+Open your browser and visit
+👉 http://localhost:3000
 
-**Use GitHub Codespaces**
+🧠 Comparison Logic
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+Parses both Excel files as JSON objects.
 
-## What technologies are used for this project?
+Compares values by matching column headers.
 
-This project is built with:
+Ignores case and spacing differences by default.
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+Highlights mismatched cells in the comparison table.
 
-## How can I deploy this project?
+Displays a summary of total mismatches and affected columns.
 
-Simply open [Lovable](https://lovable.dev/projects/c4e59cc1-12d9-4d58-ae2a-8ebffb84f637) and click on Share -> Publish.
+🧾 Example
+Column	Row	Expected	Found
+Name	3	John	Jon
+Age	5	25	26
 
-## Can I connect a custom domain to my Lovable project?
+Mismatched cells appear highlighted in red or orange.
 
-Yes, you can!
+🧩 Future Enhancements
+
+ Download comparison results as Excel
+
+ Add strict (case-sensitive) comparison mode
+
+ Support CSV upload
+
+ Show side-by-side diff viewer
+
+👨‍💻 Author
+
+Hasibul Islam Nirjhar
+📍 Islamic University of Technology
+💻 Software Engineering | AI | Web Development
+📧 hasibnirjhar07@gmail.com
+
+🌐 GitHub: @HasibNirjhar07
+
+🪪 License
+
+This project is open source and available under the MIT License.
+
+Would you like me to include badges (e.g. Next.js, License, Deploy on V
 
 To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
 
