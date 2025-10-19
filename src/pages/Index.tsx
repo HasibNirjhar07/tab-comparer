@@ -81,12 +81,14 @@ const Index = () => {
               value=""
               onChange={setData1}
               placeholder="Paste your first Excel data here (with headers)...&#10;Name&#9;Age&#9;City&#10;John&#9;30&#9;NYC&#10;Jane&#9;25&#9;LA"
+              data={data1}
             />
             <FileInput
               label="Second Dataset"
               value=""
               onChange={setData2}
               placeholder="Paste your second Excel data here (with headers)...&#10;Name&#9;Age&#9;City&#10;John&#9;30&#9;NYC&#10;Jane&#9;26&#9;LA"
+              data={data2}
             />
           </div>
           
