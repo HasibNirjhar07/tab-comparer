@@ -31,6 +31,56 @@ export const FileInput = ({ label, value, onChange, placeholder, data }: FileInp
     reader.readAsBinaryString(file);
   };
 
+  const parseTSV = (text: string): string[][] => {
+    const rows: string[][] = [];
+    let currentRow: string[] = [];
+    let currentCell = '';
+    let inQuotes = false;
+    
+    for (let i = 0; i < text.length; i++) {
+      const char = text[i];
+      const nextChar = text[i + 1];
+      
+      if (char === '"') {
+        if (inQuotes && nextChar === '"') {
+          currentCell += '"';
+          i++;
+        } else {
+          inQuotes = !inQuotes;
+        }
+      } else if (char === '\t' && !inQuotes) {
+        currentRow.push(currentCell);
+        currentCell = '';
+      } else if (char === '\n' && !inQuotes) {
+        currentRow.push(currentCell);
+        if (currentRow.some(cell => cell.trim())) {
+          rows.push(currentRow);
+        }
+        currentRow = [];
+        currentCell = '';
+      } else if (char === '\r' && nextChar === '\n' && !inQuotes) {
+        currentRow.push(currentCell);
+        if (currentRow.some(cell => cell.trim())) {
+          rows.push(currentRow);
+        }
+        currentRow = [];
+        currentCell = '';
+        i++;
+      } else {
+        currentCell += char;
+      }
+    }
+    
+    if (currentCell || currentRow.length > 0) {
+      currentRow.push(currentCell);
+      if (currentRow.some(cell => cell.trim())) {
+        rows.push(currentRow);
+      }
+    }
+    
+    return rows;
+  };
+
   const handlePasteChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const text = e.target.value;
     if (!text.trim()) {
@@ -38,8 +88,7 @@ export const FileInput = ({ label, value, onChange, placeholder, data }: FileInp
       return;
     }
 
-    const rows = text.split('\n').filter(row => row.trim());
-    const data = rows.map(row => row.split('\t'));
+    const data = parseTSV(text);
     onChange(data);
   };
 
@@ -82,9 +131,8 @@ export const FileInput = ({ label, value, onChange, placeholder, data }: FileInp
             onChange([]);
             return;
           }
-          const rows = text.split('\n').filter(row => row.trim());
-          const data = rows.map(row => row.split('\t'));
-          onChange(data);
+          const parsedData = parseTSV(text);
+          onChange(parsedData);
         }}
         className="min-h-[120px] border rounded-md bg-background p-3 focus:outline-none focus:ring-2 focus:ring-primary overflow-auto"
       >
