@@ -22,7 +22,10 @@ export const ComparisonResults = ({ data1, data2, mismatches }: ComparisonResult
   };
 
   const columnMismatches = getMismatchesByColumn();
-  const headers = data1[0] || data2[0] || [];
+  const maxCols = Math.max(
+    Math.max(...(data1.map(row => row.length).concat(0))),
+    Math.max(...(data2.map(row => row.length).concat(0)))
+  );
 
   if (!data1.length || !data2.length) {
     return null;
@@ -47,9 +50,9 @@ export const ComparisonResults = ({ data1, data2, mismatches }: ComparisonResult
           </div>
           <div className="p-4 bg-muted rounded-lg">
             <div className="text-2xl font-bold text-primary">
-              {Math.max(data1.length, data2.length) - 1}
+              {Math.max(data1.length, data2.length)}
             </div>
-            <div className="text-sm text-muted-foreground">Total Rows</div>
+            <div className="text-sm text-muted-foreground">Total Rows (incl. header)</div>
           </div>
         </div>
         
@@ -59,7 +62,7 @@ export const ComparisonResults = ({ data1, data2, mismatches }: ComparisonResult
             <div className="flex flex-wrap gap-2">
               {Array.from(columnMismatches.entries()).map(([col, count]) => (
                 <Badge key={col} variant="destructive" className="bg-mismatch">
-                  {headers[col] || `Column ${col + 1}`}: {count} mismatch{count > 1 ? 'es' : ''}
+                  Column {String.fromCharCode(65 + col)}: {count} mismatch{count > 1 ? 'es' : ''}
                 </Badge>
               ))}
             </div>
@@ -78,9 +81,9 @@ export const ComparisonResults = ({ data1, data2, mismatches }: ComparisonResult
             <thead>
               <tr className="bg-muted">
                 <th className="border border-border p-3 text-left font-semibold text-sm">Row</th>
-                {headers.map((header, idx) => (
+                {Array.from({ length: maxCols }, (_, idx) => (
                   <th key={idx} className="border border-border p-3 text-left font-semibold text-sm">
-                    {header}
+                    Column {String.fromCharCode(65 + idx)}
                     {columnMismatches.has(idx) && (
                       <Badge variant="destructive" className="ml-2 bg-mismatch text-xs">
                         {columnMismatches.get(idx)}
@@ -91,19 +94,19 @@ export const ComparisonResults = ({ data1, data2, mismatches }: ComparisonResult
               </tr>
             </thead>
             <tbody>
-              {Array.from({ length: Math.max(data1.length, data2.length) - 1 }, (_, rowIdx) => {
-                const row1 = data1[rowIdx + 1] || [];
-                const row2 = data2[rowIdx + 1] || [];
+              {Array.from({ length: Math.max(data1.length, data2.length) }, (_, rowIdx) => {
+                const row1 = data1[rowIdx] || [];
+                const row2 = data2[rowIdx] || [];
                 
                 return (
                   <tr key={rowIdx} className="hover:bg-accent/50 transition-colors">
                     <td className="border border-border p-3 text-sm font-medium bg-muted">
-                      {rowIdx + 1}
+                      {rowIdx === 0 ? 'Header' : rowIdx}
                     </td>
-                    {headers.map((_, colIdx) => {
+                    {Array.from({ length: maxCols }, (_, colIdx) => {
                       const val1 = row1[colIdx] || '';
                       const val2 = row2[colIdx] || '';
-                      const hasMismatch = isMismatch(rowIdx + 1, colIdx);
+                      const hasMismatch = isMismatch(rowIdx, colIdx);
                       
                       return (
                         <td
