@@ -26,6 +26,7 @@ export const ComparisonResults = ({ data1, data2, mismatches }: ComparisonResult
     Math.max(...(data1.map(row => row.length).concat(0))),
     Math.max(...(data2.map(row => row.length).concat(0)))
   );
+  const headers = data1[0] || data2[0] || [];
 
   if (!data1.length || !data2.length) {
     return null;
@@ -62,7 +63,7 @@ export const ComparisonResults = ({ data1, data2, mismatches }: ComparisonResult
             <div className="flex flex-wrap gap-2">
               {Array.from(columnMismatches.entries()).map(([col, count]) => (
                 <Badge key={col} variant="destructive" className="bg-mismatch">
-                  Column {String.fromCharCode(65 + col)}: {count} mismatch{count > 1 ? 'es' : ''}
+                  {headers[col] || `Column ${col + 1}`}: {count} mismatch{count > 1 ? 'es' : ''}
                 </Badge>
               ))}
             </div>
@@ -83,7 +84,7 @@ export const ComparisonResults = ({ data1, data2, mismatches }: ComparisonResult
                 <th className="border border-border p-3 text-left font-semibold text-sm">Row</th>
                 {Array.from({ length: maxCols }, (_, idx) => (
                   <th key={idx} className="border border-border p-3 text-left font-semibold text-sm">
-                    Column {String.fromCharCode(65 + idx)}
+                    {headers[idx] || `Column ${idx + 1}`}
                     {columnMismatches.has(idx) && (
                       <Badge variant="destructive" className="ml-2 bg-mismatch text-xs">
                         {columnMismatches.get(idx)}
