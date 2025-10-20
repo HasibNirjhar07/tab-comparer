@@ -77,17 +77,17 @@ const Index = () => {
         <Card className="p-6 mb-8 border-2 shadow-lg">
           <div className="grid md:grid-cols-2 gap-6 mb-6">
             <FileInput
-              label="First Dataset"
+              label="Development Dataset"
               value=""
               onChange={setData1}
-              placeholder="Paste your first Excel data here (with headers)...&#10;Name&#9;Age&#9;City&#10;John&#9;30&#9;NYC&#10;Jane&#9;25&#9;LA"
+              placeholder="Paste your development Excel data here (with headers)...&#10;Name&#9;Age&#9;City&#10;John&#9;30&#9;NYC&#10;Jane&#9;25&#9;LA"
               data={data1}
             />
             <FileInput
-              label="Second Dataset"
+              label="Production Dataset"
               value=""
               onChange={setData2}
-              placeholder="Paste your second Excel data here (with headers)...&#10;Name&#9;Age&#9;City&#10;John&#9;30&#9;NYC&#10;Jane&#9;26&#9;LA"
+              placeholder="Paste your production Excel data here (with headers)...&#10;Name&#9;Age&#9;City&#10;John&#9;30&#9;NYC&#10;Jane&#9;26&#9;LA"
               data={data2}
             />
           </div>
