@@ -97,11 +97,12 @@ export const ComparisonResults = ({ data1, data2, mismatches }: ComparisonResult
               {Array.from({ length: Math.max(data1.length, data2.length) }, (_, rowIdx) => {
                 const row1 = data1[rowIdx] || [];
                 const row2 = data2[rowIdx] || [];
+                const isHeader = rowIdx === 0;
                 
                 return (
                   <tr key={rowIdx} className="hover:bg-accent/50 transition-colors">
                     <td className="border border-border p-3 text-sm font-medium bg-muted">
-                      {rowIdx === 0 ? 'Header' : rowIdx}
+                      {isHeader ? 'Header' : rowIdx}
                     </td>
                     {Array.from({ length: maxCols }, (_, colIdx) => {
                       const val1 = row1[colIdx] || '';
@@ -115,7 +116,7 @@ export const ComparisonResults = ({ data1, data2, mismatches }: ComparisonResult
                             hasMismatch
                               ? 'bg-mismatch/20 text-mismatch font-semibold ring-2 ring-mismatch/50'
                               : ''
-                          }`}
+                          } ${isHeader ? 'font-bold' : ''}`}
                         >
                           <div className="space-y-1">
                             <div className={hasMismatch ? 'line-through opacity-60' : ''}>
