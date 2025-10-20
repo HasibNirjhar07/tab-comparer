@@ -29,8 +29,8 @@ const Index = () => {
       Math.max(...data2.map(row => row.length))
     );
 
-    // Start from row 1 (skip headers)
-    for (let row = 1; row < maxRows; row++) {
+    // Compare all rows including headers (row 0)
+    for (let row = 0; row < maxRows; row++) {
       for (let col = 0; col < maxCols; col++) {
         const val1 = data1[row]?.[col]?.toString().trim() || '';
         const val2 = data2[row]?.[col]?.toString().trim() || '';
