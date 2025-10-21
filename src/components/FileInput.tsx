@@ -182,9 +182,16 @@ export const FileInput = ({ label, value, onChange, onSheetsLoaded, onSheetDataC
       
       {data.length > 0 && (
         <div className="border rounded-md bg-card">
-          <div className="flex items-center gap-2 px-3 py-2 border-b bg-muted/50">
-            <Table className="w-4 h-4 text-muted-foreground" />
-            <span className="text-sm font-medium text-muted-foreground">Preview</span>
+          <div className="flex items-center justify-between px-3 py-2 border-b bg-muted/50">
+            <div className="flex items-center gap-2">
+              <Table className="w-4 h-4 text-muted-foreground" />
+              <span className="text-sm font-medium text-muted-foreground">Preview (showing first 100 rows)</span>
+            </div>
+            {data.length > 100 && (
+              <Badge variant="secondary" className="text-xs">
+                +{data.length - 100} more rows
+              </Badge>
+            )}
           </div>
           <ScrollArea className="h-[200px]">
             <table className="w-full border-collapse">
@@ -199,7 +206,7 @@ export const FileInput = ({ label, value, onChange, onSheetsLoaded, onSheetDataC
                 </tr>
               </thead>
               <tbody>
-                {data.map((row, rowIndex) => (
+                {data.slice(0, 100).map((row, rowIndex) => (
                   <tr key={rowIndex} className={rowIndex === 0 ? "bg-primary/5" : ""}>
                     <td className="border border-border bg-muted/30 px-2 py-1 text-xs font-medium text-center">
                       {rowIndex + 1}

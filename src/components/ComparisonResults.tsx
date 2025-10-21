@@ -100,6 +100,12 @@ export const ComparisonResults = ({ data1, data2, mismatches }: ComparisonResult
           availableColumns={headers}
         />
         
+        {Math.max(data1.length, data2.length) > 1000 && (
+          <div className="mb-3 px-3 py-2 bg-muted rounded-md text-sm text-muted-foreground">
+            ℹ️ Showing first 1000 rows for performance. All {Math.max(data1.length, data2.length)} rows were compared.
+          </div>
+        )}
+        
         <div className="overflow-x-auto">
           <table className="w-full border-collapse">
             <thead>
@@ -118,7 +124,7 @@ export const ComparisonResults = ({ data1, data2, mismatches }: ComparisonResult
               </tr>
             </thead>
             <tbody>
-              {Array.from({ length: Math.max(data1.length, data2.length) }, (_, rowIdx) => {
+              {Array.from({ length: Math.min(Math.max(data1.length, data2.length), 1000) }, (_, rowIdx) => {
                 const row1 = data1[rowIdx] || [];
                 const row2 = data2[rowIdx] || [];
                 const isHeader = rowIdx === 0;
