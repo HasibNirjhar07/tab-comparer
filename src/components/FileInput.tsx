@@ -10,11 +10,13 @@ interface FileInputProps {
   label: string;
   value: string;
   onChange: (data: string[][]) => void;
+  onSheetsLoaded?: (sheets: string[]) => void;
+  onSheetDataChange?: (sheetName: string, data: string[][]) => void;
   placeholder: string;
   data: string[][];
 }
 
-export const FileInput = ({ label, value, onChange, placeholder, data }: FileInputProps) => {
+export const FileInput = ({ label, value, onChange, onSheetsLoaded, onSheetDataChange, placeholder, data }: FileInputProps) => {
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -23,10 +25,21 @@ export const FileInput = ({ label, value, onChange, placeholder, data }: FileInp
     reader.onload = (event) => {
       const binaryStr = event.target?.result;
       const workbook = XLSX.read(binaryStr, { type: 'binary' });
+      
+      // Notify parent about available sheets
+      if (onSheetsLoaded) {
+        onSheetsLoaded(workbook.SheetNames);
+      }
+      
+      // Load first sheet by default
       const sheetName = workbook.SheetNames[0];
       const sheet = workbook.Sheets[sheetName];
       const data = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as string[][];
       onChange(data);
+      
+      if (onSheetDataChange) {
+        onSheetDataChange(sheetName, data);
+      }
     };
     reader.readAsBinaryString(file);
   };

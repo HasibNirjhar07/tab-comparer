@@ -1,6 +1,8 @@
+import { useState, useMemo } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { AlertCircle, CheckCircle2 } from "lucide-react";
+import { ColumnFilterInput } from "@/components/ColumnFilterInput";
 
 interface ComparisonResultsProps {
   data1: string[][];
@@ -9,6 +11,8 @@ interface ComparisonResultsProps {
 }
 
 export const ComparisonResults = ({ data1, data2, mismatches }: ComparisonResultsProps) => {
+  const [columnFilter, setColumnFilter] = useState("");
+
   const isMismatch = (row: number, col: number) => {
     return mismatches.some(m => m.row === row && m.col === col);
   };
@@ -27,6 +31,18 @@ export const ComparisonResults = ({ data1, data2, mismatches }: ComparisonResult
     Math.max(...(data2.map(row => row.length).concat(0)))
   );
   const headers = data1[0] || data2[0] || [];
+
+  // Filter columns based on search
+  const visibleColumns = useMemo(() => {
+    if (!columnFilter.trim()) {
+      return Array.from({ length: maxCols }, (_, i) => i);
+    }
+    const query = columnFilter.toLowerCase();
+    return Array.from({ length: maxCols }, (_, i) => i).filter((idx) => {
+      const header = headers[idx] || `Column ${idx + 1}`;
+      return header.toLowerCase().includes(query);
+    });
+  }, [columnFilter, maxCols, headers]);
 
   if (!data1.length || !data2.length) {
     return null;
@@ -77,12 +93,19 @@ export const ComparisonResults = ({ data1, data2, mismatches }: ComparisonResult
           <CheckCircle2 className="w-5 h-5 text-primary" />
           Detailed Comparison
         </h2>
+        
+        <ColumnFilterInput
+          value={columnFilter}
+          onChange={setColumnFilter}
+          availableColumns={headers}
+        />
+        
         <div className="overflow-x-auto">
           <table className="w-full border-collapse">
             <thead>
               <tr className="bg-muted">
                 <th className="border border-border p-3 text-left font-semibold text-sm">Row</th>
-                {Array.from({ length: maxCols }, (_, idx) => (
+                {visibleColumns.map((idx) => (
                   <th key={idx} className="border border-border p-3 text-left font-semibold text-sm">
                     {headers[idx] || `Column ${idx + 1}`}
                     {columnMismatches.has(idx) && (
@@ -105,7 +128,7 @@ export const ComparisonResults = ({ data1, data2, mismatches }: ComparisonResult
                     <td className="border border-border p-3 text-sm font-medium bg-muted">
                       {isHeader ? 'Header' : rowIdx}
                     </td>
-                    {Array.from({ length: maxCols }, (_, colIdx) => {
+                    {visibleColumns.map((colIdx) => {
                       const val1 = row1[colIdx] || '';
                       const val2 = row2[colIdx] || '';
                       const hasMismatch = isMismatch(rowIdx, colIdx);
