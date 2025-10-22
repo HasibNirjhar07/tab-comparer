@@ -18,7 +18,7 @@ app = FastAPI(title="Excel Comparison API")
 # CORS middleware for React frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for development
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -61,7 +61,6 @@ def clean_value(val):
 
 def clean_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     """Clean DataFrame for JSON serialization"""
-    # Replace inf and -inf with None
     df = df.replace([np.inf, -np.inf], np.nan)
     return df
 
@@ -79,29 +78,23 @@ def read_file(file_content: bytes, filename: str, sheet_name: Optional[str] = No
         logger.info(f"Reading file: {filename}, sheet: {sheet_name}")
         
         if is_csv_file(filename):
-            # Read CSV file
             csv_file = io.StringIO(file_content.decode('utf-8', errors='ignore'))
             df = pd.read_csv(csv_file)
             logger.info(f"CSV file read successfully: {len(df)} rows, {len(df.columns)} columns")
         elif is_excel_file(filename):
-            # Read Excel file
             excel_file = io.BytesIO(file_content)
-            
-            # Try multiple engines for compatibility
             engines_to_try = []
             
             if filename.lower().endswith('.xls'):
-                # Old Excel format - try xlrd first, then openpyxl as fallback
                 engines_to_try = ['xlrd', 'openpyxl']
             else:
-                # New Excel format - use openpyxl
                 engines_to_try = ['openpyxl']
             
             last_error = None
             for engine in engines_to_try:
                 try:
                     logger.info(f"Trying engine: {engine}")
-                    excel_file.seek(0)  # Reset file pointer
+                    excel_file.seek(0)
                     
                     if sheet_name:
                         df = pd.read_excel(excel_file, sheet_name=sheet_name, engine=engine)
@@ -109,24 +102,20 @@ def read_file(file_content: bytes, filename: str, sheet_name: Optional[str] = No
                         df = pd.read_excel(excel_file, sheet_name=0, engine=engine)
                     
                     logger.info(f"Excel file read successfully with {engine}: {len(df)} rows, {len(df.columns)} columns")
-                    break  # Success, exit loop
+                    break
                 except Exception as e:
                     last_error = e
                     logger.warning(f"Engine {engine} failed: {str(e)}")
                     continue
             else:
-                # All engines failed
                 raise last_error or Exception("Could not read Excel file with any engine")
-                
         else:
             raise ValueError(f"Unsupported file format: {filename}")
         
-        # Clean the DataFrame
         df = clean_dataframe(df)
         return df
     except UnicodeDecodeError as e:
         logger.error(f"Unicode decode error: {str(e)}")
-        # Try with different encoding for CSV
         try:
             csv_file = io.StringIO(file_content.decode('latin-1'))
             df = pd.read_csv(csv_file)
@@ -139,15 +128,13 @@ def read_file(file_content: bytes, filename: str, sheet_name: Optional[str] = No
         raise HTTPException(status_code=400, detail=f"Error reading file: {str(e)}")
 
 def get_sheet_names(file_content: bytes, filename: str) -> List[str]:
-    """Get all sheet names from Excel file (returns ['Sheet1'] for CSV)"""
+    """Get all sheet names from Excel/CSV file"""
     try:
         if is_csv_file(filename):
-            # CSV files don't have sheets, return default
             return ["Sheet1"]
         
         excel_file = io.BytesIO(file_content)
         
-        # Determine engine based on file extension
         if filename.lower().endswith('.xls'):
             engine = 'xlrd'
         else:
@@ -159,115 +146,133 @@ def get_sheet_names(file_content: bytes, filename: str) -> List[str]:
         logger.error(f"Error reading sheet names: {str(e)}")
         raise HTTPException(status_code=400, detail=f"Error reading sheet names: {str(e)}")
 
-def normalize_value(val, treat_null_as_zero: bool) -> str:
-    """Normalize values for comparison"""
-    if pd.isna(val):
-        val_str = ""
-    else:
-        val_str = str(val).strip()
+def normalize_dataframe(df: pd.DataFrame, treat_null_as_zero: bool) -> pd.DataFrame:
+    """Vectorized normalization of entire DataFrame"""
+    df = df.copy()
     
-    if not treat_null_as_zero:
-        return val_str
+    # Convert all to string first
+    df = df.astype(str)
     
-    # Treat NULL-like values and zero as equivalent
-    val_lower = val_str.lower()
-    if val_lower in ['null', '[null]', '0', '0.0', '', 'nan', 'none']:
-        return '__NULL_OR_ZERO__'
+    # Strip whitespace vectorized
+    df = df.apply(lambda x: x.str.strip() if x.dtype == "object" else x)
     
-    return val_str
+    if treat_null_as_zero:
+        # Replace null-like values with a sentinel
+        null_values = ['nan', 'NaN', 'None', 'null', '[null]', '0', '0.0', '', 'none']
+        for col in df.columns:
+            df[col] = df[col].replace(null_values, '__NULL_OR_ZERO__')
+    
+    return df
 
 def dataframe_to_list(df: pd.DataFrame, max_rows: int = None) -> List[List]:
     """Convert DataFrame to list of lists with proper cleaning"""
     if max_rows:
         df = df.head(max_rows)
     
-    result = []
-    for _, row in df.iterrows():
-        cleaned_row = [clean_value(val) for val in row]
-        result.append(cleaned_row)
-    
+    # Vectorized conversion
+    result = df.applymap(clean_value).values.tolist()
     return result
 
-def compare_dataframes(
+def compare_dataframes_optimized(
     df1: pd.DataFrame, 
     df2: pd.DataFrame, 
     comparison_mode: str,
     selected_columns: List[str],
     treat_null_as_zero: bool
 ) -> dict:
-    """Compare two DataFrames and return mismatches"""
+    """Optimized comparison using vectorized operations"""
     
-    # Store original row counts BEFORE any modifications
+    import time
+    start_time = time.time()
+    
     original_rows_df1 = len(df1)
     original_rows_df2 = len(df2)
     max_rows = max(original_rows_df1, original_rows_df2)
     
     logger.info(f"Comparing DataFrames: df1={original_rows_df1} rows, df2={original_rows_df2} rows")
     
-    # Ensure both DataFrames have the same columns for comparison
+    # Determine columns to compare
     if comparison_mode == "all":
-        # Use all columns present in either DataFrame
         all_columns = list(set(df1.columns.tolist() + df2.columns.tolist()))
         columns_to_compare = all_columns
     else:
-        # Use only selected columns
         columns_to_compare = selected_columns
     
-    # Ensure both DataFrames have the same columns (fill missing with NaN)
+    # Ensure both DataFrames have same columns
     for col in columns_to_compare:
         if col not in df1.columns:
             df1[col] = ""
         if col not in df2.columns:
             df2[col] = ""
     
-    # Align both DataFrames to have same number of rows
+    # Reorder columns to match
+    df1 = df1[columns_to_compare]
+    df2 = df2[columns_to_compare]
+    
+    # Align to same number of rows
     if len(df1) < max_rows:
-        empty_df = pd.DataFrame([[""] * len(df1.columns)] * (max_rows - len(df1)), columns=df1.columns)
+        empty_df = pd.DataFrame("", index=range(len(df1), max_rows), columns=df1.columns)
         df1 = pd.concat([df1, empty_df], ignore_index=True)
     if len(df2) < max_rows:
-        empty_df = pd.DataFrame([[""] * len(df2.columns)] * (max_rows - len(df2)), columns=df2.columns)
+        empty_df = pd.DataFrame("", index=range(len(df2), max_rows), columns=df2.columns)
         df2 = pd.concat([df2, empty_df], ignore_index=True)
     
+    logger.info(f"Alignment took: {time.time() - start_time:.2f}s")
+    norm_start = time.time()
+    
+    # Normalize both DataFrames (vectorized)
+    df1_norm = normalize_dataframe(df1, treat_null_as_zero)
+    df2_norm = normalize_dataframe(df2, treat_null_as_zero)
+    
+    logger.info(f"Normalization took: {time.time() - norm_start:.2f}s")
+    comp_start = time.time()
+    
+    # Vectorized comparison - find all mismatches at once
+    comparison_mask = (df1_norm != df2_norm)
+    
+    logger.info(f"Comparison took: {time.time() - comp_start:.2f}s")
+    extract_start = time.time()
+    
+    # Get indices where values don't match
+    mismatch_indices = np.argwhere(comparison_mask.values)
+    
+    logger.info(f"Found {len(mismatch_indices)} mismatches")
+    logger.info(f"Index extraction took: {time.time() - extract_start:.2f}s")
+    build_start = time.time()
+    
+    # Build mismatch list efficiently
     mismatches = []
     column_mismatch_counts = {}
     
-    # Compare ALL rows - no limits
-    logger.info(f"Comparing {max_rows} rows across {len(columns_to_compare)} columns")
+    # Get column names as array for fast lookup
+    col_names = df1.columns.tolist()
     
-    for col in columns_to_compare:
-        if col not in df1.columns or col not in df2.columns:
-            continue
-            
-        col_idx = list(df1.columns).index(col) if col in df1.columns else list(df2.columns).index(col)
+    # Vectorized value extraction
+    for row_idx, col_idx in mismatch_indices:
+        col_name = col_names[col_idx]
         
-        # Compare ALL rows in this column
-        for row_idx in range(max_rows):
-            val1 = df1.iloc[row_idx][col] if row_idx < len(df1) else ""
-            val2 = df2.iloc[row_idx][col] if row_idx < len(df2) else ""
-            
-            normalized_val1 = normalize_value(val1, treat_null_as_zero)
-            normalized_val2 = normalize_value(val2, treat_null_as_zero)
-            
-            if normalized_val1 != normalized_val2:
-                mismatches.append({
-                    "row": row_idx,
-                    "col": col_idx,
-                    "col_name": col,
-                    "value1": clean_value(val1),
-                    "value2": clean_value(val2)
-                })
-                
-                if col not in column_mismatch_counts:
-                    column_mismatch_counts[col] = 0
-                column_mismatch_counts[col] += 1
+        # Use iloc for faster access
+        val1 = df1.iloc[row_idx, col_idx]
+        val2 = df2.iloc[row_idx, col_idx]
+        
+        mismatches.append({
+            "row": int(row_idx),
+            "col": int(col_idx),
+            "col_name": col_name,
+            "value1": clean_value(val1),
+            "value2": clean_value(val2)
+        })
+        
+        column_mismatch_counts[col_name] = column_mismatch_counts.get(col_name, 0) + 1
     
-    logger.info(f"Comparison complete: {len(mismatches)} mismatches found across {max_rows} rows")
+    logger.info(f"Mismatch building took: {time.time() - build_start:.2f}s")
+    logger.info(f"Total comparison time: {time.time() - start_time:.2f}s")
     
     return {
         "mismatches": mismatches,
         "total_mismatches": len(mismatches),
         "columns_affected": len(column_mismatch_counts),
-        "total_rows": max_rows,  # This is the ACTUAL number of rows compared
+        "total_rows": max_rows,
         "affected_columns": column_mismatch_counts
     }
 
@@ -288,7 +293,6 @@ async def get_sheets(file: UploadFile = File(...)):
         if not file.filename:
             raise HTTPException(status_code=400, detail="No file uploaded")
         
-        # Accept both CSV and Excel files
         if not (is_csv_file(file.filename) or is_excel_file(file.filename)):
             raise HTTPException(
                 status_code=400, 
@@ -336,7 +340,6 @@ async def preview_data(
         
         logger.info(f"Reading file for preview, size: {len(content)} bytes")
         
-        # For CSV, ignore sheet_name
         if is_csv_file(file.filename):
             sheet_name = None
         
@@ -344,7 +347,6 @@ async def preview_data(
         
         logger.info(f"DataFrame loaded: {len(df)} rows, {len(df.columns)} columns")
         
-        # Convert to list of lists with proper cleaning
         preview_data = dataframe_to_list(df, max_rows)
         headers = [str(col) for col in df.columns.tolist()]
         
@@ -374,7 +376,6 @@ async def compare_excel(
     try:
         logger.info(f"Comparison request: {file1.filename} vs {file2.filename}")
         
-        # Validate file types
         if not file1.filename or not file2.filename:
             raise HTTPException(status_code=400, detail="Both files must be uploaded")
         
@@ -384,13 +385,11 @@ async def compare_excel(
         if not (is_csv_file(file2.filename) or is_excel_file(file2.filename)):
             raise HTTPException(status_code=400, detail=f"File 2 format not supported: {file2.filename}")
         
-        # Parse selected columns
         try:
             selected_cols = json.loads(selected_columns)
         except:
             selected_cols = []
         
-        # Read files
         content1 = await file1.read()
         content2 = await file2.read()
         
@@ -399,7 +398,6 @@ async def compare_excel(
         
         logger.info(f"File sizes: {len(content1)} and {len(content2)} bytes")
         
-        # For CSV files, ignore sheet_name
         if is_csv_file(file1.filename):
             sheet_name1 = None
         if is_csv_file(file2.filename):
@@ -410,29 +408,25 @@ async def compare_excel(
         
         logger.info(f"DataFrames loaded: {len(df1)}x{len(df1.columns)} vs {len(df2)}x{len(df2.columns)}")
         
-        # Store original counts before comparison
         original_rows_1 = len(df1)
         original_rows_2 = len(df2)
         
-        # Perform comparison
-        result = compare_dataframes(
+        # Use optimized comparison
+        result = compare_dataframes_optimized(
             df1, df2, 
             comparison_mode, 
             selected_cols, 
             treat_null_as_zero
         )
         
-        # Add metadata about files
         result["file1_rows"] = original_rows_1
         result["file2_rows"] = original_rows_2
         result["file1_columns"] = len(df1.columns)
         result["file2_columns"] = len(df2.columns)
         
-        # Add column information
         result["columns1"] = [str(col) for col in df1.columns.tolist()]
         result["columns2"] = [str(col) for col in df2.columns.tolist()]
         
-        # Add sample of data for display (first 1000 rows)
         result["data1_sample"] = dataframe_to_list(df1, 1000)
         result["data2_sample"] = dataframe_to_list(df2, 1000)
         result["headers1"] = [str(col) for col in df1.columns.tolist()]
@@ -456,13 +450,12 @@ async def compare_excel_large(
     treat_null_as_zero: bool = Form(False),
     sheet_name1: Optional[str] = Form(None),
     sheet_name2: Optional[str] = Form(None),
-    chunk_size: int = Form(10000)
+    chunk_size: int = Form(100000)
 ):
-    """Compare large Excel/CSV files in chunks to handle millions of rows"""
+    """Compare large Excel/CSV files - now uses optimized algorithm"""
     try:
         logger.info(f"Large comparison request: {file1.filename} vs {file2.filename}")
         
-        # Validate file types
         if not file1.filename or not file2.filename:
             raise HTTPException(status_code=400, detail="Both files must be uploaded")
         
@@ -472,20 +465,17 @@ async def compare_excel_large(
         if not (is_csv_file(file2.filename) or is_excel_file(file2.filename)):
             raise HTTPException(status_code=400, detail=f"File 2 format not supported: {file2.filename}")
         
-        # Parse selected columns
         try:
             selected_cols = json.loads(selected_columns)
         except:
             selected_cols = []
         
-        # Read files
         content1 = await file1.read()
         content2 = await file2.read()
         
         if not content1 or not content2:
             raise HTTPException(status_code=400, detail="One or both files are empty")
         
-        # For CSV files, ignore sheet_name
         if is_csv_file(file1.filename):
             sheet_name1 = None
         if is_csv_file(file2.filename):
@@ -494,70 +484,25 @@ async def compare_excel_large(
         df1 = read_file(content1, file1.filename, sheet_name1)
         df2 = read_file(content2, file2.filename, sheet_name2)
         
-        # Store original counts
         original_rows_1 = len(df1)
         original_rows_2 = len(df2)
         
-        total_rows = max(len(df1), len(df2))
-        logger.info(f"Comparing {total_rows} rows")
+        # Use optimized comparison (can handle millions of rows efficiently)
+        result = compare_dataframes_optimized(
+            df1, df2, 
+            comparison_mode, 
+            selected_cols, 
+            treat_null_as_zero
+        )
         
-        # If files are small enough, use regular comparison
-        if total_rows <= chunk_size:
-            result = compare_dataframes(df1, df2, comparison_mode, selected_cols, treat_null_as_zero)
-        else:
-            # Process in chunks for large files
-            all_mismatches = []
-            column_mismatch_counts = {}
-            
-            num_chunks = (total_rows + chunk_size - 1) // chunk_size
-            logger.info(f"Processing {num_chunks} chunks")
-            
-            for i in range(num_chunks):
-                chunk_start = i * chunk_size
-                chunk_end = min((i + 1) * chunk_size, total_rows)
-                
-                df1_chunk = df1.iloc[chunk_start:chunk_end].copy()
-                df2_chunk = df2.iloc[chunk_start:chunk_end].copy()
-                
-                chunk_result = compare_dataframes(
-                    df1_chunk, df2_chunk, 
-                    comparison_mode, 
-                    selected_cols, 
-                    treat_null_as_zero
-                )
-                
-                # Adjust row indices for chunk offset
-                for mismatch in chunk_result["mismatches"]:
-                    mismatch["row"] += chunk_start
-                    all_mismatches.append(mismatch)
-                
-                # Aggregate column mismatch counts
-                for col, count in chunk_result["affected_columns"].items():
-                    if col not in column_mismatch_counts:
-                        column_mismatch_counts[col] = 0
-                    column_mismatch_counts[col] += count
-                
-                logger.info(f"Chunk {i+1}/{num_chunks} complete")
-            
-            result = {
-                "mismatches": all_mismatches,
-                "total_mismatches": len(all_mismatches),
-                "columns_affected": len(column_mismatch_counts),
-                "total_rows": total_rows,
-                "affected_columns": column_mismatch_counts
-            }
-        
-        # Add metadata about files
         result["file1_rows"] = original_rows_1
         result["file2_rows"] = original_rows_2
         result["file1_columns"] = len(df1.columns)
         result["file2_columns"] = len(df2.columns)
         
-        # Add column information
         result["columns1"] = [str(col) for col in df1.columns.tolist()]
         result["columns2"] = [str(col) for col in df2.columns.tolist()]
         
-        # Add sample of data for display (first 1000 rows only)
         result["data1_sample"] = dataframe_to_list(df1, 1000)
         result["data2_sample"] = dataframe_to_list(df2, 1000)
         result["headers1"] = [str(col) for col in df1.columns.tolist()]

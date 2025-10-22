@@ -9,8 +9,7 @@ import { toast } from "@/hooks/use-toast";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-
-const API_BASE_URL = "http://localhost:8000";
+import { API_BASE_URL } from "@/config/api";
 
 const Index = () => {
   const [file1, setFile1] = useState<File | null>(null);
@@ -21,10 +20,14 @@ const Index = () => {
   const [sheets2, setSheets2] = useState<string[]>([]);
   const [selectedSheet1, setSelectedSheet1] = useState<string>("");
   const [selectedSheet2, setSelectedSheet2] = useState<string>("");
-  const [comparisonMode, setComparisonMode] = useState<"all" | "specific">("all");
+  const [comparisonMode, setComparisonMode] = useState<"all" | "specific">(
+    "all"
+  );
   const [selectedColumns, setSelectedColumns] = useState<string[]>([]);
   const [treatNullAsZero, setTreatNullAsZero] = useState(false);
-  const [mismatches, setMismatches] = useState<Array<{ row: number; col: number; value1: string; value2: string }>>([]);
+  const [mismatches, setMismatches] = useState<
+    Array<{ row: number; col: number; value1: string; value2: string }>
+  >([]);
   const [hasCompared, setHasCompared] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingSheets1, setIsLoadingSheets1] = useState(false);
@@ -36,7 +39,12 @@ const Index = () => {
   const columns2 = useMemo(() => data2[0] || [], [data2]);
 
   // Fetch sheets from API
-  const fetchSheets = async (file: File, setSheets: (sheets: string[]) => void, setSelectedSheet: (sheet: string) => void, setIsLoadingSheets: (loading: boolean) => void) => {
+  const fetchSheets = async (
+    file: File,
+    setSheets: (sheets: string[]) => void,
+    setSelectedSheet: (sheet: string) => void,
+    setIsLoadingSheets: (loading: boolean) => void
+  ) => {
     setIsLoadingSheets(true);
     const formData = new FormData();
     formData.append("file", file);
@@ -58,7 +66,7 @@ const Index = () => {
       toast({
         title: "Error",
         description: "Failed to load sheet names",
-        variant: "destructive"
+        variant: "destructive",
       });
     } finally {
       setIsLoadingSheets(false);
@@ -66,7 +74,11 @@ const Index = () => {
   };
 
   // Preview data from API
-  const previewData = async (file: File, sheetName: string | null, setData: (data: string[][]) => void) => {
+  const previewData = async (
+    file: File,
+    sheetName: string | null,
+    setData: (data: string[][]) => void
+  ) => {
     const formData = new FormData();
     formData.append("file", file);
     if (sheetName) {
@@ -92,7 +104,7 @@ const Index = () => {
       toast({
         title: "Error",
         description: "Failed to preview data",
-        variant: "destructive"
+        variant: "destructive",
       });
     }
   };
@@ -103,7 +115,12 @@ const Index = () => {
     if (!uploadedFile) return;
 
     setFile1(uploadedFile);
-    await fetchSheets(uploadedFile, setSheets1, setSelectedSheet1, setIsLoadingSheets1);
+    await fetchSheets(
+      uploadedFile,
+      setSheets1,
+      setSelectedSheet1,
+      setIsLoadingSheets1
+    );
     await previewData(uploadedFile, null, setData1);
   };
 
@@ -113,31 +130,42 @@ const Index = () => {
     if (!uploadedFile) return;
 
     setFile2(uploadedFile);
-    await fetchSheets(uploadedFile, setSheets2, setSelectedSheet2, setIsLoadingSheets2);
+    await fetchSheets(
+      uploadedFile,
+      setSheets2,
+      setSelectedSheet2,
+      setIsLoadingSheets2
+    );
     await previewData(uploadedFile, null, setData2);
   };
 
   // Handle sheet change
-  const handleSheet1Change = useCallback(async (sheetName: string) => {
-    setSelectedSheet1(sheetName);
-    if (file1) {
-      await previewData(file1, sheetName, setData1);
-    }
-  }, [file1]);
+  const handleSheet1Change = useCallback(
+    async (sheetName: string) => {
+      setSelectedSheet1(sheetName);
+      if (file1) {
+        await previewData(file1, sheetName, setData1);
+      }
+    },
+    [file1]
+  );
 
-  const handleSheet2Change = useCallback(async (sheetName: string) => {
-    setSelectedSheet2(sheetName);
-    if (file2) {
-      await previewData(file2, sheetName, setData2);
-    }
-  }, [file2]);
+  const handleSheet2Change = useCallback(
+    async (sheetName: string) => {
+      setSelectedSheet2(sheetName);
+      if (file2) {
+        await previewData(file2, sheetName, setData2);
+      }
+    },
+    [file2]
+  );
 
   const compareData = async () => {
     if (!file1 || !file2) {
       toast({
         title: "Missing Files",
         description: "Please upload both Excel files to compare",
-        variant: "destructive"
+        variant: "destructive",
       });
       return;
     }
@@ -146,7 +174,7 @@ const Index = () => {
       toast({
         title: "No Columns Selected",
         description: "Please select at least one column to compare",
-        variant: "destructive"
+        variant: "destructive",
       });
       return;
     }
@@ -158,7 +186,7 @@ const Index = () => {
     formData.append("comparison_mode", comparisonMode);
     formData.append("selected_columns", JSON.stringify(selectedColumns));
     formData.append("treat_null_as_zero", treatNullAsZero.toString());
-    
+
     if (selectedSheet1) {
       formData.append("sheet_name1", selectedSheet1);
     }
@@ -178,30 +206,32 @@ const Index = () => {
       }
 
       const result = await response.json();
-      
+
       // Update data with samples from backend
       setData1([result.headers1, ...result.data1_sample]);
       setData2([result.headers2, ...result.data2_sample]);
-      
+
       setMismatches(result.mismatches);
       setHasCompared(true);
 
       const file1Rows = result.file1_rows || result.total_rows;
       const file2Rows = result.file2_rows || result.total_rows;
       const maxRows = Math.max(file1Rows, file2Rows);
-      
+
       setActualRowCount(maxRows);
 
       toast({
         title: "Comparison Complete",
-        description: `Compared ${maxRows.toLocaleString()} rows. Found ${result.total_mismatches.toLocaleString()} mismatch${result.total_mismatches !== 1 ? 'es' : ''}`,
-        variant: result.total_mismatches > 0 ? "default" : "default"
+        description: `Compared ${maxRows.toLocaleString()} rows. Found ${result.total_mismatches.toLocaleString()} mismatch${
+          result.total_mismatches !== 1 ? "es" : ""
+        }`,
+        variant: result.total_mismatches > 0 ? "default" : "default",
       });
     } catch (error) {
       toast({
         title: "Error",
         description: "Failed to compare files. Please try again.",
-        variant: "destructive"
+        variant: "destructive",
       });
     } finally {
       setIsLoading(false);
@@ -216,8 +246,12 @@ const Index = () => {
           <div className="flex items-center gap-3">
             <FileSpreadsheet className="w-8 h-8 text-primary" />
             <div>
-              <h1 className="text-3xl font-bold text-foreground">Excel & CSV Compare Pro</h1>
-              <p className="text-muted-foreground mt-1">Server-powered comparison for millions of rows</p>
+              <h1 className="text-3xl font-bold text-foreground">
+                Excel & CSV Compare Pro
+              </h1>
+              <p className="text-muted-foreground mt-1">
+                Server-powered comparison for millions of rows
+              </p>
             </div>
           </div>
         </div>
@@ -231,14 +265,16 @@ const Index = () => {
             {/* Dataset 1 */}
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <Label className="text-base font-semibold">Development Dataset</Label>
+                <Label className="text-base font-semibold">
+                  Development Dataset
+                </Label>
                 {data1.length > 0 && (
                   <Badge variant="default" className="gap-1">
                     {data1.length} rows loaded
                   </Badge>
                 )}
               </div>
-              
+
               <input
                 type="file"
                 accept=".xlsx,.xls,.xlsm,.xlsb,.csv"
@@ -277,7 +313,9 @@ const Index = () => {
 
               {data1.length > 0 && (
                 <div className="border rounded-md p-3 bg-muted/30 max-h-[200px] overflow-auto">
-                  <p className="text-xs text-muted-foreground mb-2">Preview (first 100 rows)</p>
+                  <p className="text-xs text-muted-foreground mb-2">
+                    Preview (first 100 rows)
+                  </p>
                   <div className="text-xs">
                     <strong>Columns:</strong> {columns1.join(", ")}
                   </div>
@@ -288,14 +326,16 @@ const Index = () => {
             {/* Dataset 2 */}
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <Label className="text-base font-semibold">Production Dataset</Label>
+                <Label className="text-base font-semibold">
+                  Production Dataset
+                </Label>
                 {data2.length > 0 && (
                   <Badge variant="default" className="gap-1">
                     {data2.length} rows loaded
                   </Badge>
                 )}
               </div>
-              
+
               <input
                 type="file"
                 accept=".xlsx,.xls,.xlsm,.xlsb,.csv"
@@ -334,7 +374,9 @@ const Index = () => {
 
               {data2.length > 0 && (
                 <div className="border rounded-md p-3 bg-muted/30 max-h-[200px] overflow-auto">
-                  <p className="text-xs text-muted-foreground mb-2">Preview (first 100 rows)</p>
+                  <p className="text-xs text-muted-foreground mb-2">
+                    Preview (first 100 rows)
+                  </p>
                   <div className="text-xs">
                     <strong>Columns:</strong> {columns2.join(", ")}
                   </div>
@@ -360,7 +402,9 @@ const Index = () => {
             <Checkbox
               id="null-zero"
               checked={treatNullAsZero}
-              onCheckedChange={(checked) => setTreatNullAsZero(checked as boolean)}
+              onCheckedChange={(checked) =>
+                setTreatNullAsZero(checked as boolean)
+              }
               disabled={isLoading}
             />
             <Label htmlFor="null-zero" className="text-sm cursor-pointer">
@@ -370,8 +414,8 @@ const Index = () => {
               </span>
             </Label>
           </div>
-          
-          <Button 
+
+          <Button
             onClick={compareData}
             className="w-full md:w-auto gap-2 bg-primary hover:bg-primary/90 shadow-md hover:shadow-lg transition-all"
             size="lg"
@@ -393,7 +437,7 @@ const Index = () => {
 
         {/* Results Section */}
         {hasCompared && (
-          <ComparisonResults 
+          <ComparisonResults
             data1={data1}
             data2={data2}
             mismatches={mismatches}
@@ -404,10 +448,19 @@ const Index = () => {
         {!hasCompared && (
           <Card className="p-12 text-center border-2 border-dashed">
             <GitCompare className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
-            <h3 className="text-xl font-semibold text-foreground mb-2">Ready to Compare</h3>
-            <p className="text-muted-foreground">Upload your Excel or CSV files above and click "Compare Data" to get started</p>
-            <p className="text-sm text-muted-foreground mt-2">✨ Now supports millions of rows with server-side processing</p>
-            <p className="text-xs text-muted-foreground mt-1">📊 Supported formats: .xlsx, .xls, .xlsm, .xlsb, .csv</p>
+            <h3 className="text-xl font-semibold text-foreground mb-2">
+              Ready to Compare
+            </h3>
+            <p className="text-muted-foreground">
+              Upload your Excel or CSV files above and click "Compare Data" to
+              get started
+            </p>
+            <p className="text-sm text-muted-foreground mt-2">
+              ✨ Now supports millions of rows with server-side processing
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              📊 Supported formats: .xlsx, .xls, .xlsm, .xlsb, .csv
+            </p>
           </Card>
         )}
       </main>
