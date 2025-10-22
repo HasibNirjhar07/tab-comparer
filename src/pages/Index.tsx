@@ -4,11 +4,13 @@ import { SheetSelector } from "@/components/SheetSelector";
 import { ColumnSelector } from "@/components/ColumnSelector";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { FileSpreadsheet, GitCompare, Upload, Loader2 } from "lucide-react";
+import { FileSpreadsheet, GitCompare, Upload, Loader2, FileText, Clipboard } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
 import { API_BASE_URL } from "@/config/api";
 
 const Index = () => {
@@ -33,6 +35,10 @@ const Index = () => {
   const [isLoadingSheets1, setIsLoadingSheets1] = useState(false);
   const [isLoadingSheets2, setIsLoadingSheets2] = useState(false);
   const [actualRowCount, setActualRowCount] = useState(0);
+  const [inputMode1, setInputMode1] = useState<"file" | "paste">("file");
+  const [inputMode2, setInputMode2] = useState<"file" | "paste">("file");
+  const [pastedData1, setPastedData1] = useState("");
+  const [pastedData2, setPastedData2] = useState("");
 
   // Extract column headers
   const columns1 = useMemo(() => data1[0] || [], [data1]);
@@ -115,6 +121,7 @@ const Index = () => {
     if (!uploadedFile) return;
 
     setFile1(uploadedFile);
+    setPastedData1(""); // Clear pasted data
     await fetchSheets(
       uploadedFile,
       setSheets1,
@@ -130,6 +137,7 @@ const Index = () => {
     if (!uploadedFile) return;
 
     setFile2(uploadedFile);
+    setPastedData2(""); // Clear pasted data
     await fetchSheets(
       uploadedFile,
       setSheets2,
@@ -160,11 +168,96 @@ const Index = () => {
     [file2]
   );
 
-  const compareData = async () => {
-    if (!file1 || !file2) {
+  // Parse pasted CSV/TSV data
+  const parsePastedData = (text: string): string[][] => {
+    if (!text.trim()) return [];
+    
+    const lines = text.trim().split('\n');
+    const data: string[][] = [];
+    
+    for (const line of lines) {
+      // Try tab-separated first, then comma-separated
+      let row: string[];
+      if (line.includes('\t')) {
+        row = line.split('\t');
+      } else {
+        row = line.split(',').map(cell => cell.trim());
+      }
+      data.push(row);
+    }
+    
+    return data;
+  };
+
+  // Handle paste for dataset 1
+  const handlePaste1 = () => {
+    if (!pastedData1.trim()) {
       toast({
-        title: "Missing Files",
-        description: "Please upload both Excel files to compare",
+        title: "No Data",
+        description: "Please paste some data first",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const parsed = parsePastedData(pastedData1);
+    if (parsed.length === 0) {
+      toast({
+        title: "Invalid Data",
+        description: "Could not parse the pasted data",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setData1(parsed);
+    setFile1(null); // Clear file
+    setSheets1([]);
+    setSelectedSheet1("");
+    
+    toast({
+      title: "Data Loaded",
+      description: `Loaded ${parsed.length} rows from pasted data`,
+    });
+  };
+
+  // Handle paste for dataset 2
+  const handlePaste2 = () => {
+    if (!pastedData2.trim()) {
+      toast({
+        title: "No Data",
+        description: "Please paste some data first",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const parsed = parsePastedData(pastedData2);
+    if (parsed.length === 0) {
+      toast({
+        title: "Invalid Data",
+        description: "Could not parse the pasted data",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setData2(parsed);
+    setFile2(null); // Clear file
+    setSheets2([]);
+    setSelectedSheet2("");
+    
+    toast({
+      title: "Data Loaded",
+      description: `Loaded ${parsed.length} rows from pasted data`,
+    });
+  };
+
+  const compareData = async () => {
+    if ((!file1 && data1.length === 0) || (!file2 && data2.length === 0)) {
+      toast({
+        title: "Missing Data",
+        description: "Please provide data for both datasets (upload file or paste data)",
         variant: "destructive",
       });
       return;
@@ -180,6 +273,70 @@ const Index = () => {
     }
 
     setIsLoading(true);
+    
+    // If using pasted data, we need to handle comparison differently
+    if (!file1 || !file2) {
+      // Client-side comparison for pasted data
+      try {
+        const mismatches: Array<{ row: number; col: number; value1: string; value2: string }> = [];
+        const maxRows = Math.max(data1.length, data2.length);
+        const maxCols = Math.max(data1[0]?.length || 0, data2[0]?.length || 0);
+
+        // Determine which columns to compare
+        let colsToCompare: number[] = [];
+        if (comparisonMode === "all") {
+          colsToCompare = Array.from({ length: maxCols }, (_, i) => i);
+        } else {
+          // Map selected column names to indices
+          colsToCompare = selectedColumns
+            .map(colName => columns1.indexOf(colName))
+            .filter(idx => idx !== -1);
+        }
+
+        for (let row = 1; row < maxRows; row++) {
+          for (const col of colsToCompare) {
+            const val1 = data1[row]?.[col] || "";
+            const val2 = data2[row]?.[col] || "";
+
+            // Apply null/zero treatment if enabled
+            const normalizeValue = (val: string) => {
+              if (!treatNullAsZero) return val;
+              const trimmed = val.trim().toLowerCase();
+              if (trimmed === "" || trimmed === "null" || trimmed === "[null]" || trimmed === "0") {
+                return "0";
+              }
+              return val;
+            };
+
+            if (normalizeValue(val1) !== normalizeValue(val2)) {
+              mismatches.push({ row, col, value1: val1, value2: val2 });
+            }
+          }
+        }
+
+        setMismatches(mismatches);
+        setHasCompared(true);
+        setActualRowCount(maxRows - 1); // Exclude header row
+
+        toast({
+          title: "Comparison Complete",
+          description: `Compared ${(maxRows - 1).toLocaleString()} rows. Found ${mismatches.length.toLocaleString()} mismatch${
+            mismatches.length !== 1 ? "es" : ""
+          }`,
+        });
+      } catch (error) {
+        toast({
+          title: "Error",
+          description: "Failed to compare data. Please try again.",
+          variant: "destructive",
+        });
+      } finally {
+        setIsLoading(false);
+      }
+      return;
+    }
+
+    // Server-side comparison for uploaded files
     const formData = new FormData();
     formData.append("file1", file1);
     formData.append("file2", file2);
@@ -275,46 +432,86 @@ const Index = () => {
                 )}
               </div>
 
-              <input
-                type="file"
-                accept=".xlsx,.xls,.xlsm,.xlsb,.csv"
-                onChange={handleFile1Upload}
-                className="hidden"
-                id="file1"
-                disabled={isLoading}
-              />
-              <Button
-                variant="outline"
-                asChild
-                className="flex items-center gap-2 hover:border-primary hover:text-primary transition-colors w-full"
-                disabled={isLoading}
-              >
-                <label htmlFor="file1" className="cursor-pointer">
-                  <Upload className="w-4 h-4" />
-                  {file1 ? file1.name : "Upload Excel or CSV"}
-                </label>
-              </Button>
+              <Tabs value={inputMode1} onValueChange={(v) => setInputMode1(v as "file" | "paste")}>
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="file" className="gap-2">
+                    <Upload className="w-4 h-4" />
+                    Upload File
+                  </TabsTrigger>
+                  <TabsTrigger value="paste" className="gap-2">
+                    <Clipboard className="w-4 h-4" />
+                    Paste Data
+                  </TabsTrigger>
+                </TabsList>
 
-              {isLoadingSheets1 && (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Loading sheets...
-                </div>
-              )}
+                <TabsContent value="file" className="space-y-4 mt-4">
+                  <input
+                    type="file"
+                    accept=".xlsx,.xls,.xlsm,.xlsb,.csv"
+                    onChange={handleFile1Upload}
+                    className="hidden"
+                    id="file1"
+                    disabled={isLoading}
+                  />
+                  <Button
+                    variant="outline"
+                    asChild
+                    className="flex items-center gap-2 hover:border-primary hover:text-primary transition-colors w-full"
+                    disabled={isLoading}
+                  >
+                    <label htmlFor="file1" className="cursor-pointer">
+                      <Upload className="w-4 h-4" />
+                      {file1 ? file1.name : "Upload Excel or CSV"}
+                    </label>
+                  </Button>
 
-              {sheets1.length > 0 && (
-                <SheetSelector
-                  label="Select Sheet"
-                  sheets={sheets1}
-                  selectedSheet={selectedSheet1}
-                  onSheetChange={handleSheet1Change}
-                />
-              )}
+                  {isLoadingSheets1 && (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Loading sheets...
+                    </div>
+                  )}
+
+                  {sheets1.length > 0 && (
+                    <SheetSelector
+                      label="Select Sheet"
+                      sheets={sheets1}
+                      selectedSheet={selectedSheet1}
+                      onSheetChange={handleSheet1Change}
+                    />
+                  )}
+                </TabsContent>
+
+                <TabsContent value="paste" className="space-y-4 mt-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="paste1" className="text-sm">
+                      Paste CSV or Tab-separated data
+                    </Label>
+                    <Textarea
+                      id="paste1"
+                      placeholder="Paste your data here... (comma or tab separated)&#10;Example:&#10;Name,Age,City&#10;John,30,NYC&#10;Jane,25,LA"
+                      value={pastedData1}
+                      onChange={(e) => setPastedData1(e.target.value)}
+                      className="font-mono text-sm min-h-[150px]"
+                      disabled={isLoading}
+                    />
+                  </div>
+                  <Button
+                    onClick={handlePaste1}
+                    className="w-full gap-2"
+                    variant="outline"
+                    disabled={isLoading || !pastedData1.trim()}
+                  >
+                    <FileText className="w-4 h-4" />
+                    Load Pasted Data
+                  </Button>
+                </TabsContent>
+              </Tabs>
 
               {data1.length > 0 && (
                 <div className="border rounded-md p-3 bg-muted/30 max-h-[200px] overflow-auto">
                   <p className="text-xs text-muted-foreground mb-2">
-                    Preview (first 100 rows)
+                    Preview {inputMode1 === "file" ? "(first 100 rows)" : ""}
                   </p>
                   <div className="text-xs">
                     <strong>Columns:</strong> {columns1.join(", ")}
@@ -336,46 +533,86 @@ const Index = () => {
                 )}
               </div>
 
-              <input
-                type="file"
-                accept=".xlsx,.xls,.xlsm,.xlsb,.csv"
-                onChange={handleFile2Upload}
-                className="hidden"
-                id="file2"
-                disabled={isLoading}
-              />
-              <Button
-                variant="outline"
-                asChild
-                className="flex items-center gap-2 hover:border-primary hover:text-primary transition-colors w-full"
-                disabled={isLoading}
-              >
-                <label htmlFor="file2" className="cursor-pointer">
-                  <Upload className="w-4 h-4" />
-                  {file2 ? file2.name : "Upload Excel or CSV"}
-                </label>
-              </Button>
+              <Tabs value={inputMode2} onValueChange={(v) => setInputMode2(v as "file" | "paste")}>
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="file" className="gap-2">
+                    <Upload className="w-4 h-4" />
+                    Upload File
+                  </TabsTrigger>
+                  <TabsTrigger value="paste" className="gap-2">
+                    <Clipboard className="w-4 h-4" />
+                    Paste Data
+                  </TabsTrigger>
+                </TabsList>
 
-              {isLoadingSheets2 && (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Loading sheets...
-                </div>
-              )}
+                <TabsContent value="file" className="space-y-4 mt-4">
+                  <input
+                    type="file"
+                    accept=".xlsx,.xls,.xlsm,.xlsb,.csv"
+                    onChange={handleFile2Upload}
+                    className="hidden"
+                    id="file2"
+                    disabled={isLoading}
+                  />
+                  <Button
+                    variant="outline"
+                    asChild
+                    className="flex items-center gap-2 hover:border-primary hover:text-primary transition-colors w-full"
+                    disabled={isLoading}
+                  >
+                    <label htmlFor="file2" className="cursor-pointer">
+                      <Upload className="w-4 h-4" />
+                      {file2 ? file2.name : "Upload Excel or CSV"}
+                    </label>
+                  </Button>
 
-              {sheets2.length > 0 && (
-                <SheetSelector
-                  label="Select Sheet"
-                  sheets={sheets2}
-                  selectedSheet={selectedSheet2}
-                  onSheetChange={handleSheet2Change}
-                />
-              )}
+                  {isLoadingSheets2 && (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Loading sheets...
+                    </div>
+                  )}
+
+                  {sheets2.length > 0 && (
+                    <SheetSelector
+                      label="Select Sheet"
+                      sheets={sheets2}
+                      selectedSheet={selectedSheet2}
+                      onSheetChange={handleSheet2Change}
+                    />
+                  )}
+                </TabsContent>
+
+                <TabsContent value="paste" className="space-y-4 mt-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="paste2" className="text-sm">
+                      Paste CSV or Tab-separated data
+                    </Label>
+                    <Textarea
+                      id="paste2"
+                      placeholder="Paste your data here... (comma or tab separated)&#10;Example:&#10;Name,Age,City&#10;John,30,NYC&#10;Jane,25,LA"
+                      value={pastedData2}
+                      onChange={(e) => setPastedData2(e.target.value)}
+                      className="font-mono text-sm min-h-[150px]"
+                      disabled={isLoading}
+                    />
+                  </div>
+                  <Button
+                    onClick={handlePaste2}
+                    className="w-full gap-2"
+                    variant="outline"
+                    disabled={isLoading || !pastedData2.trim()}
+                  >
+                    <FileText className="w-4 h-4" />
+                    Load Pasted Data
+                  </Button>
+                </TabsContent>
+              </Tabs>
 
               {data2.length > 0 && (
                 <div className="border rounded-md p-3 bg-muted/30 max-h-[200px] overflow-auto">
                   <p className="text-xs text-muted-foreground mb-2">
-                    Preview (first 100 rows)
+                    Preview {inputMode2 === "file" ? "(first 100 rows)" : ""}
                   </p>
                   <div className="text-xs">
                     <strong>Columns:</strong> {columns2.join(", ")}
@@ -419,7 +656,7 @@ const Index = () => {
             onClick={compareData}
             className="w-full md:w-auto gap-2 bg-primary hover:bg-primary/90 shadow-md hover:shadow-lg transition-all"
             size="lg"
-            disabled={isLoading || !file1 || !file2}
+            disabled={isLoading || (data1.length === 0 || data2.length === 0)}
           >
             {isLoading ? (
               <>
@@ -452,14 +689,13 @@ const Index = () => {
               Ready to Compare
             </h3>
             <p className="text-muted-foreground">
-              Upload your Excel or CSV files above and click "Compare Data" to
-              get started
+              Upload your Excel or CSV files, or paste data directly to get started
             </p>
             <p className="text-sm text-muted-foreground mt-2">
-              ✨ Now supports millions of rows with server-side processing
+              ✨ Now supports millions of rows with server-side processing (file upload)
             </p>
             <p className="text-xs text-muted-foreground mt-1">
-              📊 Supported formats: .xlsx, .xls, .xlsm, .xlsb, .csv
+              📊 Supported formats: .xlsx, .xls, .xlsm, .xlsb, .csv, or paste CSV/TSV data
             </p>
           </Card>
         )}
