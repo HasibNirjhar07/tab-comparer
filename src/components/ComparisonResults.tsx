@@ -8,9 +8,10 @@ interface ComparisonResultsProps {
   data1: string[][];
   data2: string[][];
   mismatches: Array<{ row: number; col: number; value1: string; value2: string }>;
+  actualTotalRows?: number;
 }
 
-export const ComparisonResults = ({ data1, data2, mismatches }: ComparisonResultsProps) => {
+export const ComparisonResults = ({ data1, data2, mismatches, actualTotalRows }: ComparisonResultsProps) => {
   const [columnFilter, setColumnFilter] = useState("");
 
   const isMismatch = (row: number, col: number) => {
@@ -31,6 +32,9 @@ export const ComparisonResults = ({ data1, data2, mismatches }: ComparisonResult
     Math.max(...(data2.map(row => row.length).concat(0)))
   );
   const headers = data1[0] || data2[0] || [];
+  
+  // Use actualTotalRows if provided, otherwise calculate from data
+  const totalRows = actualTotalRows || Math.max(data1.length, data2.length);
 
   // Filter columns based on search
   const visibleColumns = useMemo(() => {
@@ -58,7 +62,7 @@ export const ComparisonResults = ({ data1, data2, mismatches }: ComparisonResult
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="p-4 bg-muted rounded-lg">
-            <div className="text-2xl font-bold text-primary">{mismatches.length}</div>
+            <div className="text-2xl font-bold text-primary">{mismatches.length.toLocaleString()}</div>
             <div className="text-sm text-muted-foreground">Total Mismatches</div>
           </div>
           <div className="p-4 bg-muted rounded-lg">
@@ -67,9 +71,14 @@ export const ComparisonResults = ({ data1, data2, mismatches }: ComparisonResult
           </div>
           <div className="p-4 bg-muted rounded-lg">
             <div className="text-2xl font-bold text-primary">
-              {Math.max(data1.length, data2.length)}
+              {totalRows.toLocaleString()}
             </div>
-            <div className="text-sm text-muted-foreground">Total Rows (incl. header)</div>
+            <div className="text-sm text-muted-foreground">Total Rows Compared</div>
+            {totalRows > data1.length && (
+              <div className="text-xs text-muted-foreground mt-1">
+                (All {totalRows.toLocaleString()} rows analyzed server-side)
+              </div>
+            )}
           </div>
         </div>
         
@@ -79,7 +88,7 @@ export const ComparisonResults = ({ data1, data2, mismatches }: ComparisonResult
             <div className="flex flex-wrap gap-2">
               {Array.from(columnMismatches.entries()).map(([col, count]) => (
                 <Badge key={col} variant="destructive" className="bg-mismatch">
-                  {headers[col] || `Column ${col + 1}`}: {count} mismatch{count > 1 ? 'es' : ''}
+                  {headers[col] || `Column ${col + 1}`}: {count.toLocaleString()} mismatch{count > 1 ? 'es' : ''}
                 </Badge>
               ))}
             </div>
@@ -100,9 +109,9 @@ export const ComparisonResults = ({ data1, data2, mismatches }: ComparisonResult
           availableColumns={headers}
         />
         
-        {Math.max(data1.length, data2.length) > 1000 && (
+        {totalRows > 1000 && (
           <div className="mb-3 px-3 py-2 bg-muted rounded-md text-sm text-muted-foreground">
-            ℹ️ Showing first 1000 rows for performance. All {Math.max(data1.length, data2.length)} rows were compared.
+            ℹ️ Showing first 1,000 rows for performance. All {totalRows.toLocaleString()} rows were compared server-side.
           </div>
         )}
         
