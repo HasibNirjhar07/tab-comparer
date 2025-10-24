@@ -1,0 +1,44 @@
+## Create `.dockerignore` in your project root:
+```
+# Frontend files (we don't need these for backend deployment)
+src/
+public/
+node_modules/
+dist/
+
+# Python cache
+backend/__pycache__/
+backend/**/__pycache__/
+backend/**/*.pyc
+backend/**/*.pyo
+backend/**/*.pyd
+backend/.Python
+backend/venv/
+backend/.venv/
+backend/env/
+
+# Environment and logs
+.env
+*.log
+
+# Git and IDE
+.git/
+.gitignore
+.DS_Store
+.vscode/
+.idea/
+
+# Build files
+*.lock
+bun.lockb
+package-lock.json
+yarn.lock
+
+# Config files not needed in container
+.eslintrc.js
+eslint.config.js
+vite.config.ts
+tsconfig.json
+postcss.config.js
+tailwind.config.ts
+components.json
