@@ -365,7 +365,7 @@ const Index = () => {
     formData.append("file", uploadedFile);
 
     try {
-      const response = await fetch(`${"http://localhost:8000"}/api/pdf/extract`, {
+      const response = await fetch(`${API_BASE_URL}/api/pdf/extract`, {
         method: "POST",
         body: formData,
       });
@@ -453,7 +453,7 @@ const Index = () => {
     if (selectedExcelSheet) formData.append("sheet_name", selectedExcelSheet);
 
     try {
-      const response = await fetch(`${"http://localhost:8000"}/api/pdf/compare`, {
+      const response = await fetch(`${API_BASE_URL}/api/pdf/compare`, {
         method: "POST",
         body: formData,
       });
