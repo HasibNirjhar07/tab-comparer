@@ -13,6 +13,7 @@ import asyncio
 import os
 from dotenv import load_dotenv
 
+
 # PDF processing libraries
 import pdfplumber
 import PyPDF2
@@ -37,9 +38,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Configure Gemini
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-
 # Initialize Gemini model
 model = None
 if GEMINI_API_KEY:
