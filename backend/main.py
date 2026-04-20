@@ -142,6 +142,9 @@ def is_csv_file(filename: str) -> bool:
 def is_excel_file(filename: str) -> bool:
     return filename.lower().endswith(('.xlsx', '.xls', '.xlsm', '.xlsb'))
 
+def is_json_file(filename: str) -> bool:
+    return filename.lower().endswith(('.json', '.jsonl'))
+
 def is_pdf_file(filename: str) -> bool:
     return filename.lower().endswith('.pdf')
 
@@ -393,6 +396,55 @@ Provide detailed, accurate comparison results in valid JSON format."""
         logger.error(f"❌ AI comparison error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"AI comparison failed: {str(e)}")
 
+def smart_flatten_json(data: list) -> pd.DataFrame:
+    """
+    Analyzes a list of dicts (JSON data) and attempts to flatten it intelligently.
+    If it finds a nested list of records (e.g. 'callEventRecords'), it flattens 
+    based on that list while preserving top-level metadata.
+    """
+    if not data:
+        return pd.DataFrame()
+        
+    try:
+        # Sample the first few records to find candidate lists
+        sample_size = min(len(data), 5)
+        candidates = {}
+        all_keys = set()
+        
+        for i in range(sample_size):
+            row = data[i]
+            if not isinstance(row, dict): continue
+            
+            all_keys.update(row.keys())
+            for key, val in row.items():
+                if isinstance(val, list) and len(val) > 0 and isinstance(val[0], dict):
+                    candidates[key] = candidates.get(key, 0) + len(val)
+        
+        # Analyze candidates
+        if not candidates:
+            # No nested lists, just standard flatten
+            return pd.json_normalize(data, sep='.')
+            
+        # Pick the candidate with the most items (heaviest payload)
+        target_field = max(candidates.items(), key=lambda x: x[1])[0]
+        
+        # Identify metadata fields (top-level keys that are NOT the target field)
+        # We handle complex metadata by just letting json_normalize handle basic keys,
+        # and more complex ones might need specific handling, but for now strict keys.
+        meta_fields = [k for k in all_keys if k != target_field]
+                    
+        logger.info(f"Smart flattening on target field: {target_field}")
+        
+        # Attempt smart flatten
+        # errors='ignore' ensures rows missing the list don't crash it
+        df = pd.json_normalize(data, record_path=[target_field], meta=meta_fields, sep='.', errors='ignore')
+        return df
+        
+    except Exception as e:
+        logger.warning(f"Smart flatten failed: {e}")
+        # Fallback to standard flatten
+        return pd.json_normalize(data, sep='.')
+
 def read_file_ultrafast(file_content: bytes, filename: str, sheet_name: Optional[str] = None) -> pd.DataFrame:
     """Ultra-optimized file reading"""
     import time
@@ -426,6 +478,46 @@ def read_file_ultrafast(file_content: bytes, filename: str, sheet_name: Optional
             else:
                 df = pd.read_excel(excel_file, sheet_name=sheet_name or 0, engine='xlrd')
                 logger.info(f"✓ XLS read: {time.time() - start_time:.2f}s")
+
+
+
+        elif is_json_file(filename):
+            json_file = io.BytesIO(file_content)
+            lines = filename.lower().endswith('.jsonl') or filename.lower().endswith('.ndjson')
+            data_to_normalize = None
+            
+            try:
+                content_str = file_content.decode('utf-8', errors='ignore')
+                
+                if lines:
+                    # Parse JSONL line by line
+                    data_to_normalize = [json.loads(line) for line in content_str.splitlines() if line.strip()]
+                else:
+                    # Parse standard JSON
+                    data_to_normalize = json.loads(content_str)
+                    if isinstance(data_to_normalize, dict):
+                         data_to_normalize = [data_to_normalize]
+                
+                logger.info(f"✓ JSON parsed for normalization: {time.time() - start_time:.2f}s")
+                
+            except Exception as e:
+                logger.warning(f"Manual parsing failed: {str(e)}")
+                # Fallback to simple pandas read
+                json_file.seek(0)
+                if lines:
+                    df = pd.read_json(json_file, lines=True)
+                else:
+                    df = pd.read_json(json_file)
+            
+            # Normalize if we have data
+            if data_to_normalize:
+                df = smart_flatten_json(data_to_normalize)
+
+            # Post-processing: Convert remaining complex objects (like lists of objects) to string
+            for col in df.columns:
+                if df[col].apply(lambda x: isinstance(x, (list, dict))).any():
+                    df[col] = df[col].apply(lambda x: json.dumps(x) if isinstance(x, (list, dict)) else x)
+                    
         else:
             raise ValueError(f"Unsupported format: {filename}")
         
@@ -451,7 +543,7 @@ async def read_files_parallel(content1: bytes, filename1: str, sheet1: Optional[
 def get_sheet_names(file_content: bytes, filename: str) -> List[str]:
     """Fast sheet name extraction"""
     try:
-        if is_csv_file(filename):
+        if is_csv_file(filename) or is_json_file(filename):
             return ["Sheet1"]
         
         excel_file = io.BytesIO(file_content)
@@ -580,8 +672,8 @@ async def compare_pdf_excel(
         if not is_pdf_file(pdf_file.filename):
             raise HTTPException(status_code=400, detail="First file must be a PDF")
         
-        if not (is_excel_file(excel_file.filename) or is_csv_file(excel_file.filename)):
-            raise HTTPException(status_code=400, detail="Second file must be Excel or CSV")
+        if not (is_excel_file(excel_file.filename) or is_csv_file(excel_file.filename) or is_json_file(excel_file.filename)):
+            raise HTTPException(status_code=400, detail="Second file must be Excel, CSV, or JSON")
         
         # Read files
         pdf_content = await pdf_file.read()
@@ -597,7 +689,7 @@ async def compare_pdf_excel(
         excel_df = read_file_ultrafast(
             excel_content, 
             excel_file.filename, 
-            sheet_name if not is_csv_file(excel_file.filename) else None
+            sheet_name if not (is_csv_file(excel_file.filename) or is_json_file(excel_file.filename)) else None
         )
         
         # AI comparison
@@ -647,7 +739,7 @@ async def health():
 async def get_sheets(file: UploadFile = File(...)):
     """Get sheet names"""
     try:
-        if not file.filename or not (is_csv_file(file.filename) or is_excel_file(file.filename)):
+        if not file.filename or not (is_csv_file(file.filename) or is_excel_file(file.filename) or is_json_file(file.filename)):
             raise HTTPException(status_code=400, detail="Invalid file format")
         
         content = await file.read()
@@ -668,31 +760,98 @@ async def preview_data(
     sheet_name: Optional[str] = Form(None),
     max_rows: int = Form(100)
 ):
-    """Preview data"""
+    """Preview data with memory-efficient streaming"""
     try:
-        if not file.filename or not (is_csv_file(file.filename) or is_excel_file(file.filename)):
+        if not file.filename or not (is_csv_file(file.filename) or is_excel_file(file.filename) or is_json_file(file.filename)):
             raise HTTPException(status_code=400, detail="Invalid file format")
         
-        content = await file.read()
-        if not content:
-            raise HTTPException(status_code=400, detail="Empty file")
+        # Determine file type and read only necessary chunks
+        df = None
         
-        df = read_file_ultrafast(content, file.filename, sheet_name if not is_csv_file(file.filename) else None)
-        
+        try:
+            if is_json_file(file.filename):
+                # Efficient JSONL reading
+                is_jsonl = file.filename.lower().endswith(('.jsonl', '.ndjson'))
+                if is_jsonl:
+                    # Read first chunk only
+                    try:
+                        with pd.read_json(file.file, lines=True, chunksize=max_rows) as reader:
+                            for chunk in reader:
+                                df = chunk
+                                break
+                    except ValueError:
+                        # Fallback for empty or malformed
+                        file.file.seek(0)
+                        df = pd.read_json(file.file, lines=True)
+                else:
+                    # Standard JSON - try to read fully (hard to chunk standard JSON arrays without specific libs)
+                    # But often .json files are actually jsonl in data engineering
+                    try:
+                        file.file.seek(0)
+                        # Try valid jsonl first even if extension is .json
+                        with pd.read_json(file.file, lines=True, chunksize=max_rows) as reader:
+                            for chunk in reader:
+                                df = chunk
+                                break
+                    except:
+                        file.file.seek(0)
+                        df = pd.read_json(file.file)
+                        if len(df) > max_rows:
+                            df = df.head(max_rows)
+
+                if df is not None:
+                    # Flatten the JSON data for preview
+                    try:
+                        data_records = df.to_dict(orient='records')
+                        df = smart_flatten_json(data_records)
+                    except Exception as norm_err:
+                        logger.warning(f"Preview normalization failed: {norm_err}")
+
+            elif is_csv_file(file.filename):
+                # Efficient CSV reading
+                df = pd.read_csv(file.file, nrows=max_rows, on_bad_lines='skip')
+                
+            elif is_excel_file(file.filename):
+                # Excel usually requires full load to parse, but we can prevent full RAM dump by not using await file.read()
+                # We pass the spooled file directly
+                if file.filename.lower().endswith(('.xlsx', '.xlsm', '.xlsb')):
+                    df = pd.read_excel(file.file, sheet_name=sheet_name or 0, nrows=max_rows, engine='openpyxl')
+                else:
+                    df = pd.read_excel(file.file, sheet_name=sheet_name or 0, nrows=max_rows)
+            
+        except Exception as read_err:
+            logger.error(f"Streaming read failed: {read_err}")
+            # Last resort fallback: read full content (risky for large files but necessary if stream fails)
+            file.file.seek(0)
+            content = await file.read()
+            df = read_file_ultrafast(content, file.filename, sheet_name)
+            if len(df) > max_rows:
+                df = df.head(max_rows)
+
+        if df is None:
+             raise Exception("Could not read dataframe")
+
+        # Post-process complex columns for preview
+        for col in df.columns:
+            # Check if column likely contains dicts/lists
+            sample = df[col].dropna().head(5)
+            if any(isinstance(x, (list, dict)) for x in sample):
+                df[col] = df[col].apply(lambda x: json.dumps(x) if isinstance(x, (list, dict)) else str(x))
+
         preview_data = dataframe_to_list_fast(df, max_rows)
         headers = df.columns.tolist()
         
         return {
             "headers": headers,
             "data": preview_data,
-            "total_rows": len(df),
+            "total_rows": "100+", # Approximate since we chunked
             "total_columns": len(headers)
         }
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Preview error: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to preview: {str(e)}")
 
 @app.post("/api/compare")
 async def compare_excel(
@@ -719,8 +878,8 @@ async def compare_excel(
             raise HTTPException(status_code=400, detail="Empty files")
         
         df1, df2 = await read_files_parallel(
-            content1, file1.filename, sheet_name1 if not is_csv_file(file1.filename) else None,
-            content2, file2.filename, sheet_name2 if not is_csv_file(file2.filename) else None
+            content1, file1.filename, sheet_name1 if not (is_csv_file(file1.filename) or is_json_file(file1.filename)) else None,
+            content2, file2.filename, sheet_name2 if not (is_csv_file(file2.filename) or is_json_file(file2.filename)) else None
         )
         
         result = compare_dataframes_lightning(df1, df2, comparison_mode, selected_cols, treat_null_as_zero)

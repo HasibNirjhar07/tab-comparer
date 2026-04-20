@@ -4,7 +4,7 @@ import { SheetSelector } from "@/components/SheetSelector";
 import { ColumnSelector } from "@/components/ColumnSelector";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { FileSpreadsheet, GitCompare, Upload, Loader2, FileText, Clipboard, MessageSquare, Sparkles, File } from "lucide-react";
+import { FileSpreadsheet, GitCompare, Upload, Loader2, FileText, Clipboard, MessageSquare, Sparkles, File, FileJson } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
@@ -39,7 +39,7 @@ const Index = () => {
   const [pastedData2, setPastedData2] = useState("");
 
   // NEW: PDF AI Comparison states
-  const [comparisonType, setComparisonType] = useState<"excel-excel" | "pdf-excel">("excel-excel");
+  const [comparisonType, setComparisonType] = useState<"excel-excel" | "pdf-excel" | "jsonl-compare">("excel-excel");
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [excelFile, setExcelFile] = useState<File | null>(null);
   const [userInstruction, setUserInstruction] = useState("");
@@ -503,10 +503,14 @@ const Index = () => {
         <Card className="p-6 mb-8 border-2 shadow-lg">
           <Label className="text-lg font-semibold mb-4 block">Select Comparison Type</Label>
           <Tabs value={comparisonType} onValueChange={(v) => setComparisonType(v as any)}>
-            <TabsList className="grid w-full grid-cols-2">
+            <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="excel-excel" className="gap-2">
                 <FileSpreadsheet className="w-4 h-4" />
                 Excel vs Excel
+              </TabsTrigger>
+              <TabsTrigger value="jsonl-compare" className="gap-2">
+                <FileJson className="w-4 h-4" />
+                JSONL vs JSONL
               </TabsTrigger>
               <TabsTrigger value="pdf-excel" className="gap-2">
                 <Sparkles className="w-4 h-4" />
@@ -734,6 +738,119 @@ const Index = () => {
                   <>
                     <GitCompare className="w-5 h-5" />
                     Compare Data
+                  </>
+                )}
+              </Button>
+            </TabsContent>
+
+            {/* JSONL vs JSONL Mode */}
+            <TabsContent value="jsonl-compare" className="space-y-6 mt-6">
+              <div className="grid md:grid-cols-2 gap-6">
+                {/* Dataset 1 */}
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-base font-semibold">First JSONL/JSON File</Label>
+                    {data1.length > 0 && (
+                      <Badge variant="default">{data1.length} rows loaded</Badge>
+                    )}
+                  </div>
+
+                  <input
+                    type="file"
+                    accept=".json,.jsonl"
+                    onChange={handleFile1Upload}
+                    className="hidden"
+                    id="json-file1"
+                    disabled={isLoading}
+                  />
+                  <Button
+                    variant="outline"
+                    asChild
+                    className="w-full"
+                    disabled={isLoading}
+                  >
+                    <label htmlFor="json-file1" className="cursor-pointer flex items-center gap-2">
+                      <Upload className="w-4 h-4" />
+                      {file1 ? file1.name : "Upload JSONL or JSON"}
+                    </label>
+                  </Button>
+
+                  {data1.length > 0 && (
+                    <div className="border rounded-md p-3 bg-muted/30 max-h-[200px] overflow-auto">
+                      <p className="text-xs text-muted-foreground mb-2">Preview</p>
+                      <div className="text-xs">
+                        <strong>Columns:</strong> {columns1.join(", ")}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Dataset 2 */}
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-base font-semibold">Second JSONL/JSON File</Label>
+                    {data2.length > 0 && (
+                      <Badge variant="default">{data2.length} rows loaded</Badge>
+                    )}
+                  </div>
+
+                  <input
+                    type="file"
+                    accept=".json,.jsonl"
+                    onChange={handleFile2Upload}
+                    className="hidden"
+                    id="json-file2"
+                    disabled={isLoading}
+                  />
+                  <Button
+                    variant="outline"
+                    asChild
+                    className="w-full"
+                    disabled={isLoading}
+                  >
+                    <label htmlFor="json-file2" className="cursor-pointer flex items-center gap-2">
+                      <Upload className="w-4 h-4" />
+                      {file2 ? file2.name : "Upload JSONL or JSON"}
+                    </label>
+                  </Button>
+
+                  {data2.length > 0 && (
+                    <div className="border rounded-md p-3 bg-muted/30 max-h-[200px] overflow-auto">
+                      <p className="text-xs text-muted-foreground mb-2">Preview</p>
+                      <div className="text-xs">
+                        <strong>Columns:</strong> {columns2.join(", ")}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {data1.length > 0 && data2.length > 0 && (
+                <ColumnSelector
+                  columnsA={columns1}
+                  columnsB={columns2}
+                  comparisonMode={comparisonMode}
+                  onModeChange={setComparisonMode}
+                  selectedColumns={selectedColumns}
+                  onColumnsChange={setSelectedColumns}
+                />
+              )}
+
+              <Button
+                onClick={compareData}
+                className="w-full gap-2"
+                size="lg"
+                disabled={isLoading || (data1.length === 0 || data2.length === 0)}
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    Comparing...
+                  </>
+                ) : (
+                  <>
+                    <GitCompare className="w-5 h-5" />
+                    Compare JSONL Data
                   </>
                 )}
               </Button>
